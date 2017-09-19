@@ -1,0 +1,26 @@
+group 'info.schnatterer'
+version '1.0-SNAPSHOT'
+
+apply plugin: 'groovy'
+// Build zip using: gradlew distZip
+apply plugin: 'application'
+
+repositories {
+    mavenCentral()
+    maven { url 'https://jitpack.io' }
+}
+
+dependencies {
+    compile 'org.codehaus.groovy:groovy-all:2.4.7'
+    compile 'org.mariadb.jdbc:mariadb-java-client:2.1.1'
+    compile 'org.eclipse.jgit:org.eclipse.jgit:4.8.0.201706111038-r'
+    compile 'com.github.giflw:remark-java:3bafef22aa'
+    compile 'org.slf4j:slf4j-api:1.7.25'
+    runtime 'ch.qos.logback:logback-classic:1.2.3'
+    testCompile 'junit:junit:4.12'
+}
+
+// Include dependent libraries in archive.
+mainClassName = "info.schnatterer.drupal2gollum.Main"
+
+
