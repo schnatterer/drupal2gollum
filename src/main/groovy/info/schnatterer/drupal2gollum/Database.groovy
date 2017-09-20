@@ -47,19 +47,18 @@ class Database {
         node2Taxonomy
     }
 
-    def findRevisions(long nid) {
-        sql.rows("SELECT\n" +
-                "  n.nid,\n" +
-                "  r.timestamp,\n" +
-                "  r.log,\n" +
-                "  r.title,\n" +
-                "  b.body_summary,\n" +
-                "  b.body_value\n" +
-                "FROM node n\n" +
-                "  INNER JOIN node_revision r ON n.nid = r.nid\n" +
-                "  INNER JOIN field_revision_body b ON r.vid = b.revision_id\n" +
-                "WHERE n.nid = ?\n" +
-                "ORDER BY r.timestamp ASC;", nid)
+    def findRevisions() {
+        sql.rows("select n.nid, r.timestamp, r.log, n.title, b.body_summary, b.body_value from node n\n" +
+            "inner join node_revision r on n.nid = r.nid\n" +
+            "inner join field_revision_body b on r.vid = b.revision_id\n" +
+            "ORDER BY r.timestamp asc;")
+    }
+
+    def findLastRevisions() {
+        sql.rows("select n.nid, n.title, b.body_summary, b.body_value from node n\n" +
+            "  inner join field_data_body b on n.nid = b.entity_id\n" +
+            "  inner join node_revision r on r.vid = b.revision_id\n" +
+            "  ORDER BY r.timestamp asc;")
     }
 
     Map<String, Date> createFilename2Timestamp() {

@@ -50,55 +50,45 @@ class Migration {
         migrateNodes(database)
     }
 
+    void createNid2TitleRedirects() {
+        database.createNode2Title().each {
+            nid, title ->
+            println "redir /node/$nid /${URLEncoder.encode(toFilename(title).trim(), "UTF-8")}"
+        }
+    }
+
     private void migrateNodes(database) {
-        Map<Long, String> node2Title = database.createNode2Title()
-        node2Taxonomy = database.createNode2Taxonomy()
-        this.markdownProcessor = new MarkdownProcessor(node2Title)
+        def allRevisions = database.findRevisions()
+        Map<Long, String> currentTitles = [:]
 
-        List lastRevisions = []
-        node2Title.each { nid, file ->
-            def lastRevision = migrateNode(nid)
+        LOG.info("Committing {} HTML-revisions", allRevisions.size())
 
-            if (lastRevision != null) {
-                lastRevisions.add(lastRevision)
-            }
-        }
-
-        // Iterate in reverse order so that the last edited files will be the newest one in the git history
-        lastRevisions.reverse().each {
-            migrateLastRevisionToMarkdown(it)
-        }
-    }
-
-    private def migrateNode(def nid) {
-        List revisions = database.findRevisions(nid)
-        if (revisions.isEmpty()) {
-            LOG.warn("Node {} has no revisions, skipping...", nid)
-            return null
-        }
-
-        migrateAllRevisionsHtml(revisions, nid)
-
-        return revisions.last()
-    }
-
-    private void migrateAllRevisionsHtml(List revisions, long nid) {
-        String formerTitle = null
-        LOG.info("Node {}: Committing {} HTML-revisions", nid, revisions.size())
-        for (def currentRevision : revisions) {
-            def currentTitle = currentRevision.get('title')
+        allRevisions.each { currentRevision ->
+            long nid = currentRevision.get('nid')
+            String currentTitle = currentRevision.get('title')
+            def formerTitle = currentTitles.get(nid)
             if (formerTitle != null && formerTitle != currentTitle) {
                 LOG.debug("Node {}: changed title from {} to {}. Date: {}",
                     nid, formerTitle, currentTitle, createDate(currentRevision).toString())
                 gitMv(createHtmlFileName(formerTitle), createHtmlFileName(currentTitle), createDate(currentRevision))
             }
-            formerTitle = currentTitle
+            currentTitles.put(nid, currentTitle)
 
             String filenameHtml = createHtmlFileName(currentTitle)
             File targetFile = new File(targetPath, filenameHtml)
             targetFile.write(createHtml(currentRevision))
 
             addAndCommit(filenameHtml, currentRevision.get('log'), createDate(currentRevision))
+        }
+
+
+        Map<Long, String> node2Title = database.createNode2Title()
+        node2Taxonomy = database.createNode2Taxonomy()
+        this.markdownProcessor = new MarkdownProcessor(node2Title)
+
+        // Iterate in reverse order so that the last edited files will be the newest one in the git history
+        database.findLastRevisions().each {
+            migrateLastRevisionToMarkdown(it)
         }
     }
 
