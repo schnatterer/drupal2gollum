@@ -46,57 +46,82 @@ class Migration {
     }
 
     private void migrate(Database database) {
-        migrateFiles(database)
-        migrateNodes(database)
+        def unprocessedFiles = migrateRevisionsAndFiles(database)
+
+        LOG.info('Done migrating revisions and files')
+
+        migrateUnprocessedFiles(unprocessedFiles)
+
+        migrateLastRevisionsToMarkdown(database)
     }
 
-    void createNid2TitleRedirects() {
-        database.createNode2Title().each {
-            nid, title ->
-            println "redir /node/$nid /${URLEncoder.encode(toFilename(title).trim(), "UTF-8")}"
-        }
-    }
-
-    private void migrateNodes(database) {
-        def allRevisions = database.findRevisions()
-        Map<Long, String> currentTitles = [:]
-
-        LOG.info("Committing {} HTML-revisions", allRevisions.size())
-
-        allRevisions.each { currentRevision ->
-            long nid = currentRevision.get('nid')
-            String currentTitle = currentRevision.get('title')
-            def formerTitle = currentTitles.get(nid)
-            if (formerTitle != null && formerTitle != currentTitle) {
-                LOG.debug("Node {}: changed title from {} to {}. Date: {}",
-                    nid, formerTitle, currentTitle, createDate(currentRevision).toString())
-                gitMv(createHtmlFileName(formerTitle), createHtmlFileName(currentTitle), createDate(currentRevision))
-            }
-            currentTitles.put(nid, currentTitle)
-
-            String filenameHtml = createHtmlFileName(currentTitle)
-            File targetFile = new File(targetPath, filenameHtml)
-            targetFile.write(createHtml(currentRevision))
-
-            addAndCommit(filenameHtml, currentRevision.get('log'), createDate(currentRevision))
-        }
-
-
+    private void migrateLastRevisionsToMarkdown(Database database) {
         Map<Long, String> node2Title = database.createNode2Title()
         node2Taxonomy = database.createNode2Taxonomy()
         this.markdownProcessor = new MarkdownProcessor(node2Title)
 
-        // Iterate in reverse order so that the last edited files will be the newest one in the git history
-        database.findLastRevisions().each {
+        def revisions = database.findLastRevisions()
+        LOG.info('Migrating {} files to markdown', revisions.size())
+        revisions.each {
             migrateLastRevisionToMarkdown(it)
+        }
+        assertOnlyMarkdownFiles()
+    }
+
+    private void migrateUnprocessedFiles(List<String> unprocessedFiles) {
+        if (!unprocessedFiles.isEmpty()) {
+            LOG.warn("The following files exist, but are not listed in database: {}. Committing anyway.", unprocessedFiles)
+            unprocessedFiles.each { filename -> copyAndCommitFile(filename, new Date())
+            }
+        } else {
+            LOG.info("All files from folder have been found in drupal DB and were migrated to gollum.")
         }
     }
 
-    private Date createDate(currentRevision) {
+    private def migrateRevisionsAndFiles(database) {
+        Paths.get(targetPath, GOLLUM_UPLOADS_DIR).toFile().mkdirs()
+        def unprocessedFiles = findExistingFilenames()
+
+        def allRevisionsAndFiles = database.findRevisionsAndFiles()
+        Map<Long, String> currentTitles = [:]
+
+        LOG.info("Committing {} HTML-revisions & files", allRevisionsAndFiles.size())
+
+        allRevisionsAndFiles.each { it ->
+            Long nid = it.get('nid')
+            Date currentDate = createDate(it)
+
+            if (nid != 0L) {
+                String currentTitle = it.get('title')
+                def formerTitle = currentTitles.get(nid)
+                if (formerTitle != null && formerTitle != currentTitle) {
+                    LOG.debug("Node {}: changed title from {} to {}. Date: {}",
+                        nid, formerTitle, currentTitle, createDate(it).toString())
+                    gitMv(createHtmlFileName(formerTitle), createHtmlFileName(currentTitle), currentDate)
+                }
+                currentTitles.put(nid, currentTitle)
+
+                String filenameHtml = createHtmlFileName(currentTitle)
+                File targetFile = new File(targetPath, filenameHtml)
+                targetFile.write(createHtml(it))
+
+                addAndCommit(filenameHtml, it.get('log'), currentDate)
+            } else {
+
+                def filename = it.get('title').replace('private://', '').replace('public://', '')
+                unprocessedFiles.remove(filename)
+                copyAndCommitFile(filename, currentDate)
+            }
+        }
+
+        unprocessedFiles
+    }
+
+    private static Date createDate(currentRevision) {
         Database.createDateFromTimestamp(currentRevision.get('timestamp'))
     }
 
-    private String createHtmlFileName(String currentTitle) {
+    private static String createHtmlFileName(String currentTitle) {
         "${toFilename(currentTitle)}.html"
     }
 
@@ -153,7 +178,15 @@ class Migration {
         }
     }
 
-    private void warnIfContains(String markdown, String snippet, filename) {
+    private assertOnlyMarkdownFiles() {
+        new File(targetPath).eachFile {
+            if (!it.isDirectory() && !it.name.endsWith('.md')) {
+                LOG.warn("Non-markdown file in repo left. Something must have gone wrong: ", it.name)
+            }
+        }
+    }
+
+    private static void warnIfContains(String markdown, String snippet, filename) {
         if (markdown.contains(snippet)) {
             LOG.warn("Transformed markdown for node {}, contains \"{}\"", filename, snippet)
         }
@@ -183,25 +216,6 @@ class Migration {
         LOG.debug("{}, original Date: {}", commitMessage, originalDate)
     }
 
-
-    private void migrateFiles(Database database) {
-        Paths.get(targetPath, GOLLUM_UPLOADS_DIR).toFile().mkdirs()
-        def unprocessedFiles = findExistingFilenames()
-
-        database.createFilename2Timestamp().each { filename, timestamp ->
-            unprocessedFiles.remove(filename)
-            copyAndCommitFile(filename, timestamp)
-        }
-
-        if (!unprocessedFiles.isEmpty()) {
-            LOG.warn("The following files exist, but are not listed in database: {}. Committing anyway.", unprocessedFiles)
-            unprocessedFiles.each { filename -> copyAndCommitFile(filename, new Date())
-            }
-        } else {
-            LOG.info("All files from folder have been found in drupal DB and were migrated to gollum.")
-        }
-    }
-
     private List<String> findExistingFilenames() {
         def existingFilenames = []
         new File(filesPath).eachFile(FileType.FILES) { file ->
@@ -225,11 +239,13 @@ class Migration {
         } catch (NoSuchFileException ignored) {
             LOG.debug("File listed in database no found in files path: $filename, originally created $timestamp. Skipping...")
         } catch (FileAlreadyExistsException ignored) {
-            LOG.warn("File listed in database already exists: $asciiFilename, originally created $timestamp. Skipping...")
+            // The file was committed earlier when first version of the file was committed. H
+            // However, as we only have the last revision of this file we cannot commit it again.
+            LOG.info("File listed in database already exists: $asciiFilename. Probably was committed in an earlier version. Skipping...")
         }
     }
 
-    private String createHtml(revision) {
+    private static String createHtml(revision) {
         String summary = revision.get('body_summary')
         if (summary == null) {
             summary = ""

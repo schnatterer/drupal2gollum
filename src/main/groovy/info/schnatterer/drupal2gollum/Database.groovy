@@ -22,14 +22,14 @@ class Database {
             "ORDER BY r.timestamp desc;") { resultSet ->
             while (resultSet.next()) {
                 node2Title.put(resultSet.getLong('nid'),
-                        resultSet.getString('title'))
+                    resultSet.getString('title'))
             }
         }
         node2Title
     }
 
     Map<Long, String> createNode2Taxonomy() {
-        Map node2Taxonomy= [:]
+        Map node2Taxonomy = [:]
         sql.query("select  n.nid, t.name from node n " +
             "inner join taxonomy_index tn on n.nid = tn.nid" +
             " inner join taxonomy_term_data t on tn.tid = t.tid") { resultSet ->
@@ -47,29 +47,20 @@ class Database {
         node2Taxonomy
     }
 
-    def findRevisions() {
-        sql.rows("select n.nid, r.timestamp, r.log, n.title, b.body_summary, b.body_value from node n\n" +
-            "inner join node_revision r on n.nid = r.nid\n" +
-            "inner join field_revision_body b on r.vid = b.revision_id\n" +
-            "ORDER BY r.timestamp asc;")
+    def findRevisionsAndFiles() {
+        sql.rows('select n.nid, n.title, r.timestamp, r.log, b.body_summary, b.body_value from node n\n' +
+            '  inner join node_revision r on n.nid = r.nid\n' +
+            '  inner join field_revision_body b on r.vid = b.revision_id\n' +
+            'UNION\n' +
+            'select 0, uri as title, timestamp, \'\', \'\', \'\' from file_managed\n' +
+            'ORDER BY timestamp asc;')
     }
 
     def findLastRevisions() {
-        sql.rows("select n.nid, n.title, b.body_summary, b.body_value from node n\n" +
-            "  inner join field_data_body b on n.nid = b.entity_id\n" +
-            "  inner join node_revision r on r.vid = b.revision_id\n" +
-            "  ORDER BY r.timestamp asc;")
-    }
-
-    Map<String, Date> createFilename2Timestamp() {
-        Map filename2Timestamp = [:]
-        sql.query('select uri, timestamp from file_managed;')  { resultSet ->
-            while (resultSet.next()) {
-                filename2Timestamp.put(resultSet.getString('uri').replace('private://', '').replace('public://', ''),
-                    createDateFromTimestamp(resultSet.getString('timestamp')))
-            }
-        }
-        filename2Timestamp
+        sql.rows('select n.nid, n.title, r.timestamp, b.body_summary, b.body_value from node n\n' +
+            '  inner join field_data_body b on n.nid = b.entity_id\n' +
+            '  inner join node_revision r on r.vid = b.revision_id\n' +
+            '  ORDER BY r.timestamp asc;')
     }
 
     static Date createDateFromTimestamp(Object timestampFromDb) {
