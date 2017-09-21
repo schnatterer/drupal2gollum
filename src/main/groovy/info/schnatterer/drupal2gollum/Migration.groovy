@@ -198,7 +198,7 @@ class Migration {
     private String addTaxonomy(String markdown, long nid) {
         def tags = node2Taxonomy.get(nid)
         if (tags) {
-            markdown = markdown + "\n\n## Tags\n\n"
+            markdown = markdown + "\n\n# Tags\n\n"
             tags.each { markdown = markdown + "* tag=${it}\n" }
             return markdown
         }
