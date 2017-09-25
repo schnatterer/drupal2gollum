@@ -4,13 +4,13 @@ A basicly working drupal (html) to [gollum](https://github.com/gollum/gollum) (m
 100% groovy.
 
 ## Usage
-Download from [here](https://github.com/schnatterer/drupal2gollum/releases) and extract.
 
-Exemplary call: 
-
-```
-drupal2gollum jdbc:mariadb://localhost:3306/databse?user=root&password=pw targetFolder drupalFilesFolder "Git author" "git-em@i.l"
-```
+* Make sure to have Java Platform installed on your machine
+* Download drupal2gollum from [here](https://github.com/schnatterer/drupal2gollum/releases) and extract.
+* Exemplary call:
+  ```
+  bin/drupal2gollum jdbc:mariadb://localhost:3306/databse?user=root&password=pw targetFolder drupalFilesFolder "Git author" "git-em@i.l"
+  ```
 
 ## More Details
 
@@ -32,3 +32,6 @@ Having said that, drupal2gollum still offers a couple of features. So it might b
 ☑ Keeps images as HTML Tags (in order to preserve `height` and `width`)  
 ☑ Keeps tables as HTML Tags (in order to support nested and more complex tables)  
 ☑ Corrects invalid nested lists: Example: \<ul\>\<ul\> to \<ul\>\<li\>\<ul\>
+
+
+Tested with Drupal 7.56 and MariaDB 10.2.8.
