@@ -35,3 +35,10 @@ Having said that, drupal2gollum still offers a couple of features. So it might b
 
 
 Tested with Drupal 7.56 and MariaDB 10.2.8.
+
+## Limitations
+
+* Does not convert comments
+* Converts only the last revision of external files
+* Even though they are somewhat formatted, some file names still might not be compatible with gollum. This might result in an UTF8 error when uploading new files to gollum. In this case, rename any suspicious (non-ascii) file names.
+
